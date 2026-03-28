@@ -1,0 +1,5 @@
+[tools]
+rust = "latest"
+
+[env]
+RUSTUP_TOOLCHAIN = ""
