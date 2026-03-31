@@ -2,13 +2,14 @@
 #![no_std]
 #![feature(offset_of)]
 
-use core::arch::asm;
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::writeln;
 use rost::graphics::draw_test_pattern;
 use rost::graphics::fill_rect;
 use rost::graphics::Bitmap;
+use rost::qemu::exit_qemu;
+use rost::qemu::QemuExitCode;
 use rost::uefi::exit_from_efi_boot_services;
 use rost::uefi::init_vram;
 use rost::uefi::EfiHandle;
@@ -17,9 +18,7 @@ use rost::uefi::EfiSystemTable;
 use rost::uefi::MemoryMapHolder;
 use rost::uefi::VramTextWriter;
 
-pub fn hlt() {
-    unsafe { asm!("hlt") }
-}
+use rost::x86::hlt;
 
 #[no_mangle]
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
@@ -66,7 +65,8 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {
-        hlt()
-    }
+    // loop {
+    //     hlt()
+    // }
+    exit_qemu(QemuExitCode::Fail);
 }
