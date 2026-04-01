@@ -10,6 +10,7 @@ use rost::graphics::fill_rect;
 use rost::graphics::Bitmap;
 use rost::qemu::exit_qemu;
 use rost::qemu::QemuExitCode;
+use rost::serial::SerialPort;
 use rost::uefi::exit_from_efi_boot_services;
 use rost::uefi::init_vram;
 use rost::uefi::EfiHandle;
@@ -22,6 +23,8 @@ use rost::x86::hlt;
 
 #[no_mangle]
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
+    let mut sw = SerialPort::new_for_com1();
+    writeln!(sw, "Hello via serial port").unwrap();
     let mut vram = init_vram(efi_system_table).expect("init_vram failed");
     let vw = vram.width();
     let vh = vram.height();
@@ -65,8 +68,5 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    // loop {
-    //     hlt()
-    // }
     exit_qemu(QemuExitCode::Fail);
 }

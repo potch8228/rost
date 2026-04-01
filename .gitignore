@@ -1,4 +1,5 @@
 /target
-mnt/
-third_party/
+/mnt
+/third_party
 font.txt
+/log
