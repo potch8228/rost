@@ -5,10 +5,14 @@
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::writeln;
+use rost::error;
 use rost::graphics::draw_test_pattern;
 use rost::graphics::fill_rect;
 use rost::graphics::Bitmap;
+use rost::info;
 use rost::init::init_basic_runtime;
+use rost::print::hexdump;
+use rost::println;
 use rost::qemu::exit_qemu;
 use rost::qemu::QemuExitCode;
 use rost::uefi::init_vram;
@@ -16,10 +20,18 @@ use rost::uefi::EfiHandle;
 use rost::uefi::EfiMemoryType;
 use rost::uefi::EfiSystemTable;
 use rost::uefi::VramTextWriter;
+use rost::warn;
 use rost::x86::hlt;
 
 #[no_mangle]
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
+    println!("Booting WasabiOS...\n");
+    println!("image_handle: {:#018X}\n", image_handle);
+    println!("efi_system_table: {:#p}\n", efi_system_table);
+    info!("info");
+    warn!("warn");
+    error!("error");
+    hexdump(efi_system_table);
     let mut vram = init_vram(efi_system_table).expect("init_vram failed");
     let vw = vram.width();
     let vh = vram.height();
@@ -53,6 +65,7 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    error!("PANIC: {info:?}");
     exit_qemu(QemuExitCode::Fail);
 }
