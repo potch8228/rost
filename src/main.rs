@@ -22,6 +22,7 @@ use rost::uefi::EfiSystemTable;
 use rost::uefi::VramTextWriter;
 use rost::warn;
 use rost::x86::hlt;
+use wasabi::x86::trigger_debug_interrupt;
 
 #[no_mangle]
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
@@ -58,6 +59,21 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     .unwrap();
 
     writeln!(w, "Hello, Non-UEFI world!").unwrap();
+    let cr3 = rost::x86::read_cr3();
+    println!("cr3 = {cr3:#p}");
+    // hexdump(unsafe { &*cr3 });
+    let t = Some(unsafe { &*cr3 });
+    println!("{t:?}");
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+    let t = t.and_then(|t| t.next_level(0));
+    println!("{t:?}");
+
+    // let (_gdt, _idt) = init_exceptions();
+    // info!("Exception initialized!");
+    // trigger_debug_interrupt();
 
     loop {
         hlt()
