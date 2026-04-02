@@ -16,19 +16,25 @@ use rost::println;
 use rost::qemu::exit_qemu;
 use rost::qemu::QemuExitCode;
 use rost::uefi::init_vram;
+use rost::uefi::locate_loaded_image_protocol;
 use rost::uefi::EfiHandle;
 use rost::uefi::EfiMemoryType;
 use rost::uefi::EfiSystemTable;
 use rost::uefi::VramTextWriter;
 use rost::warn;
 use rost::x86::hlt;
-use wasabi::x86::trigger_debug_interrupt;
+use rost::x86::init_exceptions;
+use rost::x86::trigger_debug_interrupt;
 
 #[no_mangle]
 fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
-    println!("Booting WasabiOS...\n");
+    println!("Booting ROSt...\n");
     println!("image_handle: {:#018X}\n", image_handle);
     println!("efi_system_table: {:#p}\n", efi_system_table);
+    let loaded_image_protocol = locate_loaded_image_protocol(image_handle, efi_system_table)
+        .expect("Failed to get LoadedImageProtocol");
+    println!("image_base: {:#018X}", loaded_image_protocol.image_base);
+    println!("image_size: {:#018X}", loaded_image_protocol.image_size);
     info!("info");
     warn!("warn");
     error!("error");
@@ -61,7 +67,6 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     writeln!(w, "Hello, Non-UEFI world!").unwrap();
     let cr3 = rost::x86::read_cr3();
     println!("cr3 = {cr3:#p}");
-    // hexdump(unsafe { &*cr3 });
     let t = Some(unsafe { &*cr3 });
     println!("{t:?}");
     let t = t.and_then(|t| t.next_level(0));
@@ -71,10 +76,10 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     let t = t.and_then(|t| t.next_level(0));
     println!("{t:?}");
 
-    // let (_gdt, _idt) = init_exceptions();
-    // info!("Exception initialized!");
-    // trigger_debug_interrupt();
-
+    let (_gdt, _idt) = init_exceptions();
+    info!("Exception initialized!");
+    trigger_debug_interrupt();
+    info!("Exception continued");
     loop {
         hlt()
     }
