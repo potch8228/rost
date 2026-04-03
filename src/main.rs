@@ -6,6 +6,9 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::writeln;
 use rost::error;
+use rost::executor::yield_execution;
+use rost::executor::Executor;
+use rost::executor::Task;
 use rost::graphics::draw_test_pattern;
 use rost::graphics::fill_rect;
 use rost::graphics::Bitmap;
@@ -24,7 +27,6 @@ use rost::uefi::EfiSystemTable;
 use rost::uefi::VramTextWriter;
 use rost::warn;
 use rost::x86::flush_tlb;
-use rost::x86::hlt;
 use rost::x86::init_exceptions;
 use rost::x86::read_cr3;
 use rost::x86::trigger_debug_interrupt;
@@ -95,9 +97,24 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     }
     flush_tlb();
 
-    loop {
-        hlt()
-    }
+    let task1 = Task::new(async {
+        for i in 100..=103 {
+            info!("{i}");
+            yield_execution().await;
+        }
+        Ok(())
+    });
+    let task2 = Task::new(async {
+        for i in 200..=203 {
+            info!("{i}");
+            yield_execution().await;
+        }
+        Ok(())
+    });
+    let mut executor = Executor::new();
+    executor.enqueue(task1);
+    executor.enqueue(task2);
+    Executor::run(executor);
 }
 
 #[panic_handler]
