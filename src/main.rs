@@ -15,6 +15,7 @@ use rost::init::init_basic_runtime;
 use rost::init::init_display;
 use rost::init::init_hpet;
 use rost::init::init_paging;
+use rost::init::init_pci;
 use rost::print::hexdump;
 use rost::print::set_global_vram;
 use rost::println;
@@ -57,6 +58,8 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     init_paging(&memory_map);
 
     init_hpet(acpi);
+
+    init_pci(acpi);
 
     let t0 = global_timestamp();
     let task1 = Task::new(async move {
