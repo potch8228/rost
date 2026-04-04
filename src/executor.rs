@@ -1,6 +1,8 @@
 extern crate alloc;
 // use crate::executor;
+use crate::hpet::global_timestamp;
 use crate::info;
+// use crate::mutex::Mutex;
 use crate::result::Result;
 use crate::x86::busy_loop_hint;
 use alloc::boxed::Box;
@@ -17,6 +19,7 @@ use core::task::Poll;
 use core::task::RawWaker;
 use core::task::RawWakerVTable;
 use core::task::Waker;
+use core::time::Duration;
 
 pub struct Task<T> {
     future: Pin<Box<dyn Future<Output = Result<T>>>>,
@@ -134,3 +137,40 @@ impl Future for Yield {
 pub async fn yield_execution() {
     Yield::default().await
 }
+
+pub struct TimeoutFuture {
+    time_out: Duration,
+}
+impl TimeoutFuture {
+    pub fn new(duration: Duration) -> Self {
+        Self {
+            time_out: global_timestamp() + duration,
+        }
+    }
+}
+impl Future for TimeoutFuture {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, _: &mut Context) -> Poll<()> {
+        if self.time_out < global_timestamp() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+}
+pub async fn sleep(duration: Duration) {
+    TimeoutFuture::new(duration).await
+}
+
+/*
+static GLOBAL_EXECUTOR: Mutex<Option<Executor>> = Mutex::new(None);
+#[track_caller]
+pub fn spawn_global(future: impl Future<Output = Result<()>> + 'static) {
+    let task = Task::new(future);
+    GLOBAL_EXECUTOR.lock().get_or_insert_default().enqueue(task);
+}
+pub fn start_global_executor() -> ! {
+    info!("Starting global executor loop");
+    Executor::run(&GLOBAL_EXECUTOR);
+}
+*/
