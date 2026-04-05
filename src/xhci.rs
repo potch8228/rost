@@ -5,6 +5,7 @@ use crate::bits::extract_bits;
 use crate::executor::spawn_global;
 use crate::executor::yield_execution;
 use crate::info;
+use crate::keyboard::KeyEvent;
 use crate::mmio::IoBox;
 use crate::mmio::Mmio;
 use crate::mutex::Mutex;
@@ -250,9 +251,6 @@ impl PciXhciDriver {
                 .await?;
                 let mut prev_pressed = BTreeSet::new();
                 loop {
-                    let report = Self::request_hid_report(&xhc, slot, &mut ctrl_ep_ring).await?;
-                    info!("xchi: hid report: {report:?}");
-
                     let pressed = {
                         let report =
                             Self::request_hid_report(&xhc, slot, &mut ctrl_ep_ring).await?;
@@ -260,10 +258,11 @@ impl PciXhciDriver {
                     };
                     let diff = pressed.symmetric_difference(&prev_pressed);
                     for id in diff {
+                        let e = KeyEvent::from_usb_key_id(*id);
                         if pressed.contains(id) {
-                            info!("usb_keyboard: key down: {id}");
+                            info!("usb_keyboard: key down: {id} = {e:?}");
                         } else {
-                            info!("usb_keyboard: key up: {id}");
+                            info!("usb_keyboard: key up: {id} = {e:?}");
                         }
                     }
                     prev_pressed = pressed;
