@@ -302,3 +302,61 @@ pub async fn request_hid_report(
         .await?;
     Ok(buf.to_vec())
 }
+
+pub fn pick_interface_with_triple(
+    descriptors: &Vec<UsbDescriptor>,
+    triple: (u8, u8, u8),
+) -> Option<(
+    ConfigDescriptor,
+    InterfaceDescriptor,
+    Vec<EndpointDescriptor>,
+)> {
+    let mut config: Option<ConfigDescriptor> = None;
+    let mut interface: Option<InterfaceDescriptor> = None;
+    let mut ep_list: Vec<EndpointDescriptor> = Vec::new();
+    for d in descriptors {
+        match d {
+            UsbDescriptor::Config(e) => {
+                if interface.is_some() {
+                    break;
+                }
+                config = Some(*e);
+                ep_list.clear();
+            }
+            UsbDescriptor::Interface(e) => {
+                if triple == e.triple() {
+                    interface = Some(*e);
+                }
+            }
+            UsbDescriptor::Endpoint(e) => {
+                ep_list.push(*e);
+            }
+            _ => {}
+        }
+    }
+    if let (Some(config), Some(interface)) = (config, interface) {
+        Some((config, interface, ep_list))
+    } else {
+        None
+    }
+}
+pub async fn request_hid_report_descriptor(
+    xhc: &Rc<Controller>,
+    slot: u8,
+    ctrl_ep_ring: &mut CommandRing,
+    interface_number: u8,
+) -> Result<Vec<u8>> {
+    // 7.1.1 Get_Descriptor Request
+    let buf = vec![0; 4096];
+    let mut buf = Box::into_pin(buf.into_boxed_slice());
+    xhc.request_descriptor_for_interface(
+        slot,
+        ctrl_ep_ring,
+        UsbDescriptorType::Report,
+        0,
+        interface_number.into(),
+        buf.as_mut(),
+    )
+    .await?;
+    Ok(buf.to_vec())
+}
