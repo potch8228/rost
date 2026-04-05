@@ -212,6 +212,45 @@ impl PciXhciDriver {
                 let descriptors =
                     Self::request_config_descriptor_and_rest(&xhc, slot, &mut ctrl_ep_ring).await?;
                 info!("xhci: {descriptors:?}");
+                let mut last_config: Option<ConfigDescriptor> = None;
+                let mut boot_keyboard_interface: Option<InterfaceDescriptor> = None;
+                let mut ep_desc_list: Vec<EndpointDescriptor> = Vec::new();
+                for d in descriptors {
+                    match d {
+                        UsbDescriptor::Config(e) => {
+                            if boot_keyboard_interface.is_some() {
+                                break;
+                            }
+                            last_config = Some(e);
+                            ep_desc_list.clear();
+                        }
+                        UsbDescriptor::Interface(e) => {
+                            if let (3, 1, 1) = e.triple() {
+                                boot_keyboard_interface = Some(e);
+                            }
+                        }
+                        UsbDescriptor::Endpoint(e) => {
+                            ep_desc_list.push(e);
+                        }
+                        _ => {}
+                    }
+                }
+                let config_desc = last_config.ok_or("No USB KBD Boot config found")?;
+                let interface_desc =
+                    boot_keyboard_interface.ok_or("No USB KBD Boot interface found")?;
+                xhc.request_set_config(slot, &mut ctrl_ep_ring, config_desc.config_value())
+                    .await?;
+                xhc.request_set_interface(
+                    slot,
+                    &mut ctrl_ep_ring,
+                    interface_desc.interface_number,
+                    UsbHidProtocol::BootProtocol as u8,
+                )
+                .await?;
+                loop {
+                    let report = Self::request_hid_report(&xhc, slot, &mut ctrl_ep_ring).await?;
+                    info!("xchi: hid report: {report:?}");
+                }
             }
         }
         Ok(())
@@ -301,7 +340,6 @@ impl PciXhciDriver {
             .to_string()
             .replace('\0', ""))
     }
-
     pub async fn request_string_descriptor_zero(
         xhc: &Rc<Controller>,
         slot: u8,
@@ -354,6 +392,22 @@ impl PciXhciDriver {
         let iter = DescriptorIterator::new(&buf);
         let descriptors: Vec<UsbDescriptor> = iter.collect();
         Ok(descriptors)
+    }
+    pub async fn request_hid_report(
+        xhc: &Rc<Controller>,
+        slot: u8,
+        ctrl_ep_ring: &mut CommandRing,
+    ) -> Result<Vec<u8>> {
+        /*
+        let buf = vec![0u8; 8];
+        let mut buf = Box::into_pin(buf.into_boxed_slice());
+        xhc.request_report_bytes(slot, ctrl_ep_ring, &mut buf).await?;
+        */
+        let buf = [0u8; 8];
+        let mut buf = Box::into_pin(Box::new(buf));
+        xhc.request_report_bytes(slot, ctrl_ep_ring, buf.as_mut())
+            .await?;
+        Ok(buf.to_vec())
     }
 }
 
@@ -826,12 +880,12 @@ impl Controller {
             .await?
             .transfer_result_ok()
     }
-    /*
     pub async fn request_report_bytes(
         &self,
         slot: u8,
         ctrl_ep_ring: &mut CommandRing,
-        buf: &mut Pin<Box<[u8]>>,
+        // buf: &mut Pin<Box<[u8]>>,
+        buf: Pin<&mut [u8]>,
     ) -> Result<()> {
         // [HID] 7.2.1 Get_Report Request
         ctrl_ep_ring.push(
@@ -846,8 +900,7 @@ impl Controller {
             )
             .into(),
         )?;
-        let trb_ptr_waiting =
-            ctrl_ep_ring.push(DataStageTrb::new_in(buf).into())?;
+        let trb_ptr_waiting = ctrl_ep_ring.push(DataStageTrb::new_in(buf).into())?;
         ctrl_ep_ring.push(StatusStageTrb::new_out().into())?;
         self.notify_ep(slot, 1)?;
         EventFuture::new_for_trb(&self.primary_event_ring, trb_ptr_waiting)
@@ -870,8 +923,7 @@ impl Controller {
             )
             .into(),
         )?;
-        let trb_ptr_waiting =
-            ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
+        let trb_ptr_waiting = ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
         self.notify_ep(slot, 1)?;
         EventFuture::new_for_trb(&self.primary_event_ring, trb_ptr_waiting)
             .await?
@@ -894,8 +946,7 @@ impl Controller {
             )
             .into(),
         )?;
-        let trb_ptr_waiting =
-            ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
+        let trb_ptr_waiting = ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
         self.notify_ep(slot, 1)?;
         EventFuture::new_for_trb(&self.primary_event_ring, trb_ptr_waiting)
             .await?
@@ -921,14 +972,12 @@ impl Controller {
             )
             .into(),
         )?;
-        let trb_ptr_waiting =
-            ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
+        let trb_ptr_waiting = ctrl_ep_ring.push(StatusStageTrb::new_in().into())?;
         self.notify_ep(slot, 1)?;
         EventFuture::new_for_trb(&self.primary_event_ring, trb_ptr_waiting)
             .await?
             .transfer_result_ok()
     }
-    */
 }
 
 struct EventRing {
@@ -1753,7 +1802,6 @@ impl StatusStageTrb {
             control: (TrbType::StatusStage as u32) << 10,
         }
     }
-    /*
     pub fn new_in() -> Self {
         Self {
             reserved: 0,
@@ -1764,7 +1812,6 @@ impl StatusStageTrb {
                 | GenericTrbEntry::CTRL_BIT_INTERRUPT_ON_SHORT_PACKET,
         }
     }
-    */
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1866,7 +1913,6 @@ pub struct InterfaceDescriptor {
 const _: () = assert!(size_of::<InterfaceDescriptor>() == 9);
 unsafe impl IntoPinnedMutableSlice for InterfaceDescriptor {}
 unsafe impl Sliceable for InterfaceDescriptor {}
-/*
 impl InterfaceDescriptor {
     pub fn triple(&self) -> (u8, u8, u8) {
         (
@@ -1876,7 +1922,6 @@ impl InterfaceDescriptor {
         )
     }
 }
-*/
 
 #[derive(Debug, Copy, Clone, Default)]
 #[allow(unused)]
@@ -1905,3 +1950,11 @@ pub struct EndpointDescriptor {
 const _: () = assert!(size_of::<EndpointDescriptor>() == 7);
 unsafe impl IntoPinnedMutableSlice for EndpointDescriptor {}
 unsafe impl Sliceable for EndpointDescriptor {}
+
+// [hid_1_11]:
+// 7.2.5 Get_Protocol Request
+// 7.2.6 Set_Protocol Request
+#[repr(u8)]
+pub enum UsbHidProtocol {
+    BootProtocol = 0,
+}
