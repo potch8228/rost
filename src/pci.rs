@@ -1,16 +1,16 @@
 use crate::acpi::AcpiMcfgDescriptor;
-// use crate::error;
+use crate::error;
 use crate::info;
 use crate::result::Result;
-// use crate::x86::with_current_page_table;
-// use crate::x86::PageAttr;
-// use crate::xhci::PciXhciDriver;
+use crate::x86::with_current_page_table;
+use crate::x86::PageAttr;
+use crate::xhci::PciXhciDriver;
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::Range;
 use core::ptr::read_volatile;
-// use core::ptr::write_volatile;
+use core::ptr::write_volatile;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct VendorDeviceId {
@@ -118,7 +118,6 @@ impl<T> ConfigRegisters<T> {
             unsafe { Ok(read_volatile(ecm_base.add(byte_offset / size_of::<T>()))) }
         }
     }
-    /*
     fn write(ecm_base: *mut T, byte_offset: usize, data: T) -> Result<()> {
         if !(0..256).contains(&byte_offset) || byte_offset % size_of::<T>() != 0 {
             Err("PCI ConfigRegisters write out of range")
@@ -127,7 +126,6 @@ impl<T> ConfigRegisters<T> {
             Ok(())
         }
     }
-    */
 }
 
 pub struct Pci {
@@ -164,7 +162,6 @@ impl Pci {
         for bdf in BusDeviceFunction::iter() {
             if let Some(vd) = self.read_vendor_id_and_device_id(bdf) {
                 info!("{vd}");
-                /*
                 if PciXhciDriver::supports(vd) {
                     if let Err(e) = PciXhciDriver::attach(self, bdf) {
                         error!("PCI: driver attach() failed: {e:?}")
@@ -172,16 +169,10 @@ impl Pci {
                         continue;
                     }
                 }
-                */
             }
         }
     }
-    /*
-    pub fn read_register_u32(
-        &self,
-        bdf: BusDeviceFunction,
-        byte_offset: usize,
-    ) -> Result<u32> {
+    pub fn read_register_u32(&self, bdf: BusDeviceFunction, byte_offset: usize) -> Result<u32> {
         ConfigRegisters::read(self.ecm_base(bdf), byte_offset)
     }
     pub fn write_register_u32(
@@ -192,11 +183,7 @@ impl Pci {
     ) -> Result<()> {
         ConfigRegisters::write(self.ecm_base(bdf), byte_offset, data)
     }
-    pub fn read_register_u64(
-        &self,
-        bdf: BusDeviceFunction,
-        byte_offset: usize,
-    ) -> Result<u64> {
+    pub fn read_register_u64(&self, bdf: BusDeviceFunction, byte_offset: usize) -> Result<u64> {
         let lo = self.read_register_u32(bdf, byte_offset)?;
         let hi = self.read_register_u32(bdf, byte_offset + 4)?;
         Ok(((hi as u64) << 32) | (lo as u64))
@@ -229,13 +216,8 @@ impl Pci {
             Err("Unexpected BAR0 Type")
         }
     }
-    pub fn set_command_and_status_flags(
-        &self,
-        bdf: BusDeviceFunction,
-        flags: u32,
-    ) -> Result<()> {
-        let cmd_and_status =
-            self.read_register_u32(bdf, 0x04 /* Command and status */)?;
+    pub fn set_command_and_status_flags(&self, bdf: BusDeviceFunction, flags: u32) -> Result<()> {
+        let cmd_and_status = self.read_register_u32(bdf, 0x04 /* Command and status */)?;
         self.write_register_u32(
             bdf,
             0x04, /* Command and status */
@@ -243,16 +225,42 @@ impl Pci {
         )
     }
     pub fn enable_bus_master(&self, bdf: BusDeviceFunction) -> Result<()> {
-        self.set_command_and_status_flags(
-            bdf,
-            1 << 2, /* Bus Master Enable */
-        )
+        self.set_command_and_status_flags(bdf, 1 << 2 /* Bus Master Enable */)
     }
     pub fn disable_interrupt(&self, bdf: BusDeviceFunction) -> Result<()> {
-        self.set_command_and_status_flags(
-            bdf,
-            1 << 10, /* Interrupt Disable */
+        self.set_command_and_status_flags(bdf, 1 << 10 /* Interrupt Disable */)
+    }
+}
+
+pub struct BarMem64 {
+    addr: *mut u8,
+    size: u64,
+}
+impl BarMem64 {
+    pub fn addr(&self) -> *mut u8 {
+        self.addr
+    }
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+    pub fn disable_cache(&self) {
+        let vstart = self.addr() as u64;
+        let vend = self.addr() as u64 + self.size();
+        unsafe {
+            with_current_page_table(|pt| {
+                pt.create_mapping(vstart, vend, vstart, PageAttr::ReadWriteIo)
+                    .expect("Failed to create mapping")
+            })
+        }
+    }
+}
+impl fmt::Debug for BarMem64 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "BarMem64[{:#018X}..{:#018X}]",
+            self.addr as u64,
+            self.addr as u64 + self.size()
         )
     }
-    */
 }

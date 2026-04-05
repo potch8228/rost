@@ -2,6 +2,7 @@ extern crate alloc;
 
 use crate::error;
 use crate::info;
+use crate::mmio::IoBox;
 use crate::result::Result;
 use alloc::boxed::Box;
 use core::arch::asm;
@@ -11,6 +12,7 @@ use core::marker::PhantomData;
 use core::mem::offset_of;
 use core::mem::size_of;
 use core::mem::size_of_val;
+use core::mem::ManuallyDrop;
 use core::mem::MaybeUninit;
 use core::pin::Pin;
 
@@ -915,5 +917,42 @@ pub unsafe fn write_cr3(table: *const PML4) {
 pub fn flush_tlb() {
     unsafe {
         write_cr3(read_cr3());
+    }
+}
+
+/// # Safety
+/// This will create a mutable reference to the page table structure
+/// So is is programmer's responsibility to ensure that at most one
+/// instance of the reference exist at every moment.
+pub unsafe fn take_current_page_table() -> ManuallyDrop<Box<PML4>> {
+    ManuallyDrop::new(Box::from_raw(read_cr3()))
+}
+/// # Safety
+/// This function sets the CR3 value so that anything bad can happen.
+pub unsafe fn put_current_page_table(mut table: ManuallyDrop<Box<PML4>>) {
+    // Set CR3 to reflect the updates and drop TLB caches.
+    write_cr3(Box::into_raw(ManuallyDrop::take(&mut table)))
+}
+/// # Safety
+/// This function modifies the page table as callback does, so
+/// anything bad can happen if there are some mistakes.
+pub unsafe fn with_current_page_table<F>(callback: F)
+where
+    F: FnOnce(&mut PML4),
+{
+    let mut table = take_current_page_table();
+    callback(&mut table);
+    put_current_page_table(table)
+}
+
+pub fn disable_cache<T: Sized>(io_box: &IoBox<T>) {
+    let region = io_box.as_ref();
+    let vstart = region as *const T as u64;
+    let vend = vstart + size_of_val(region) as u64;
+    unsafe {
+        with_current_page_table(|pt| {
+            pt.create_mapping(vstart, vend, vstart, PageAttr::ReadWriteIo)
+                .expect("Failed to create mapping")
+        })
     }
 }
