@@ -191,6 +191,9 @@ impl<T: Bitmap> BitmapTextWriter<T> {
             cursor_y: 0,
         }
     }
+    pub fn buf(&self) -> &T {
+        &self.buf
+    }
     /*
     fn adjust_cursor_pos(&mut self) -> bool {
         let mut adjusted = false;
