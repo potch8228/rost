@@ -19,7 +19,6 @@ pub mod keyboard;
 pub mod mmio;
 pub mod mutex;
 pub mod pci;
-pub mod pin;
 pub mod print;
 pub mod qemu;
 pub mod result;

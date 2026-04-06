@@ -16,7 +16,7 @@ use rost::init::init_display;
 use rost::init::init_hpet;
 use rost::init::init_paging;
 use rost::init::init_pci;
-use rost::print::hexdump;
+use rost::print::hexdump_struct;
 use rost::print::set_global_vram;
 use rost::println;
 use rost::qemu::exit_qemu;
@@ -41,7 +41,8 @@ fn efi_main(image_handle: EfiHandle, efi_system_table: &EfiSystemTable) {
     info!("info");
     warn!("warn");
     error!("error");
-    hexdump(efi_system_table);
+    hexdump_struct(efi_system_table);
+
     let mut vram = init_vram(efi_system_table).expect("init_vram failed");
 
     init_display(&mut vram);
